@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专属二维码合成器</title>
+    <!-- 引入现代 qrcode 库 (jsDelivr CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text: #1f2937;
+            --border: #e5e7eb;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: var(--primary);
+            font-size: 24px;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input[type="text"], select, input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .row {
+            display: flex;
+            gap: 15px;
+        }
+        .row .form-group {
+            flex: 1;
+        }
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: center;
+        }
+        .btn:hover { background: var(--primary-hover); }
+        .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+        .btn-secondary {
+            background: #10b981;
+            margin-top: 10px;
+        }
+        .btn-secondary:hover { background: #059669; }
+        
+        #previewArea {
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f9fafb;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        #previewCanvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+        }
+        .status {
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .error { color: #ef4444; font-weight: bold; }
+        
+        @media (max-width: 600px) {
+            .row { flex-direction: column; gap: 0; }
+            body { padding: 10px; }
+            .card { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎨 专属二维码合成器</h1>
+    
+    <div class="card">
+        <div class="form-group">
+            <label for="textInput">🔗 二维码内容 (网址或文字)</label>
+            <input type="text" id="textInput" placeholder="输入网址、文字或任意内容..." value="https://github.com">
+        </div>
+        
+        <div class="form-group">
+            <label for="bgInput">🖼️ 上传背景壁纸</label>
+            <input type="file" id="bgInput" accept="image/*">
+        </div>
+
+        <div class="row">
+            <div class="form-group">
+                <label for="positionSelect">📍 二维码位置</label>
+                <select id="positionSelect">
+                    <option value="bottom-right">右下角</option>
+                    <option value="bottom-left">左下角</option>
+                    <option value="top-right">右上角</option>
+                    <option value="top-left">左上角</option>
+                    <option value="center">正居中</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="sizeSelect">📏 二维码大小</label>
+                <select id="sizeSelect">
+                    <option value="0.15">小 (15%)</option>
+                    <option value="0.25" selected>中 (25%)</option>
+                    <option value="0.35">大 (35%)</option>
+                    <option value="0.50">超大 (50%)</option>
+                </select>
+            </div>
+        </div>
+
+        <button class="btn" id="generateBtn">✨ 生成预览</button>
+    </div>
+
+    <div class="card">
+        <div id="previewArea">
+            <canvas id="previewCanvas"></canvas>
+            <p class="status" id="statusText">请先上传背景图并输入内容</p>
+        </div>
+        <button class="btn btn-secondary" id="downloadBtn" style="display:none;">⬇️ 下载高清图片</button>
+    </div>
+</div>
+
+<script>
+    const textInput = document.getElementById('textInput');
+    const bgInput = document.getElementById('bgInput');
+    const positionSelect = document.getElementById('positionSelect');
+    const sizeSelect = document.getElementById('sizeSelect');
+    const generateBtn = document.getElementById('generateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const previewCanvas = document.getElementById('previewCanvas');
+    const statusText = document.getElementById('statusText');
+    const ctx = previewCanvas.getContext('2d');
+
+    let bgImage = null;
+
+    // 监听背景图上传
+    bgInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        statusText.textContent = '正在加载背景图...';
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            bgImage = new Image();
+            bgImage.onload = () => {
+                statusText.textContent = `背景图加载成功 (${bgImage.width}x${bgImage.height})，点击生成预览`;
+                statusText.className = 'status';
+            };
+            bgImage.onerror = () => {
+                statusText.textContent = '图片加载失败，请换一张';
+                statusText.className = 'status error';
+            };
+            bgImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // 生成逻辑
+    generateBtn.addEventListener('click', async () => {
+        const text = textInput.value.trim();
+        if (!text) {
+            alert('请输入二维码内容！');
+            return;
+        }
+        if (!bgImage) {
+            alert('请先上传一张背景壁纸！');
+            return;
+        }
+
+        generateBtn.disabled = true;
+        statusText.textContent = '正在生成二维码...';
+        statusText.className = 'status';
+
+        try {
+            // 1. 设置主画布尺寸为原图尺寸，保证高清
+            previewCanvas.width = bgImage.width;
+            previewCanvas.height = bgImage.height;
+
+            // 2. 绘制背景图
+            ctx.drawImage(bgImage, 0, 0, bgImage.width, bgImage.height);
+
+            // 3. 计算二维码尺寸 (基于背景图宽度的百分比)
+            const ratio = parseFloat(sizeSelect.value);
+            const qrSize = Math.floor(bgImage.width * ratio);
+            const margin = Math.floor(bgImage.width * 0.03); // 边距为宽度的3%
+
+            // 4. 使用 qrcode 库生成二维码到临时 canvas
+            const tempCanvas = document.createElement('canvas');
+            await QRCode.toCanvas(tempCanvas, text, {
+                width: qrSize,
+                margin: 2,
+                errorCorrectionLevel: 'H', // 最高容错率30%，防止背景干扰扫码
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            });
+
+            // 5. 计算绘制坐标
+            let x = margin, y = margin;
+            const pos = positionSelect.value;
+            
+            if (pos.includes('right')) x = bgImage.width - qrSize - margin;
+            if (pos.includes('bottom')) y = bgImage.height - qrSize - margin;
+            if (pos === 'center') {
+                x = (bgImage.width - qrSize) / 2;
+                y = (bgImage.height - qrSize) / 2;
+            }
+
+            // 6. 绘制白色底衬 (防止复杂背景导致二维码无法扫描)
+            const padding = 10;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.fillRect(x - padding, y - padding, qrSize + padding * 2, qrSize + padding * 2);
+
+            // 7. 将二维码绘制到主画布
+            ctx.drawImage(tempCanvas, x, y, qrSize, qrSize);
+
+            // 8. 显示结果
+            previewCanvas.style.display = 'block';
+            statusText.style.display = 'none';
+            downloadBtn.style.display = 'block';
+
+        } catch (err) {
+            console.error(err);
+            statusText.textContent = '生成失败: ' + err.message;
+            statusText.className = 'status error';
+        } finally {
+            generateBtn.disabled = false;
+        }
+    });
+
+    // 下载逻辑
+    downloadBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'QR_Wallpaper_' + Date.now() + '.png';
+        link.href = previewCanvas.toDataURL('image/png');
+        link.click();
+    });
+</script>
+
+</body>
+</html>
